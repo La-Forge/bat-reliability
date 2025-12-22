@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { MapPin, Building2, Search, Loader, Zap, Download, X, Map, List, TrendingUp, CheckCircle, AlertTriangle, Wifi, Ruler, MousePointer2 } from 'lucide-react';
+import { fetchBuildingsInBbox } from './services/bdnbService.js';
 
 // Lazy load de la carte
 const MapComponent = lazy(() => import('./MapComponent.jsx'));
@@ -99,8 +100,7 @@ const BuildingScanner = () => {
     }
   };
 
-  const handleScan = () => {
-    // (Même logique de scan que précédemment pour la simulation)
+  const handleScan = async () => {
     const searchKey = 'montpellier'; 
     setIsScanning(true);
     setScanProgress(0);
@@ -117,11 +117,39 @@ const BuildingScanner = () => {
     ];
 
     let currentStage = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       if (currentStage < stages.length) {
         setScanProgress(stages[currentStage].progress);
+        
+        // Appel API BDNB à l'étape 30%
+        if (stages[currentStage].progress === 30) {
+          try {
+            // Zone Montpellier Antigone
+            const bdnbData = await fetchBuildingsInBbox(43.605, 3.875, 43.615, 3.890);
+            if (bdnbData && bdnbData.length > 0) {
+              // Utiliser les données BDNB
+              const realResults = {
+                scanned: bdnbData.length * 10,
+                potential: bdnbData.length,
+                zone: 'Montpellier - Données BDNB',
+                buildings: bdnbData.slice(0, 12) // Limiter à 12 résultats
+              };
+              
+              setTimeout(() => {
+                clearInterval(interval);
+                setResults(realResults);
+                setIsScanning(false);
+              }, 1500);
+              return;
+            }
+          } catch (error) {
+            console.error('Erreur API BDNB, utilisation des données de démonstration');
+          }
+        }
+        
         currentStage++;
       } else {
+        // Fallback sur les données de démo
         clearInterval(interval);
         setResults(mockScanResults[searchKey]);
         setIsScanning(false);
@@ -277,7 +305,7 @@ const BuildingScanner = () => {
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-semibold text-slate-800 text-sm">{b.address}</h3>
                       <span className={`${getScoreColor(b.score)} text-white text-xs font-bold px-2 py-1 rounded-full`}>
-                        {b.score}
+                        {b.grade}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
@@ -374,11 +402,11 @@ const BuildingScanner = () => {
                       </div>
 
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Scores par Critères CSTB</h4>
-                        <ScoreBar label="Faisabilité Technique" value={selectedBuilding.subscores.technique} />
-                        <ScoreBar label="Conformité Réglementaire (PLU/Sécurité)" value={selectedBuilding.subscores.reglementaire} />
-                        <ScoreBar label="Attractivité Marché" value={selectedBuilding.subscores.marche} />
-                        <ScoreBar label="Impact Environnemental (ESG)" value={selectedBuilding.subscores.esg} />
+                        <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Critères de Conversion</h4>
+                        <ScoreBar label="Zonage PLU (Logement autorisé)" value={selectedBuilding.subscores.plu} />
+                        <ScoreBar label="Morphologie (Profondeur/Lumière)" value={selectedBuilding.subscores.morphologie} />
+                        <ScoreBar label="Marché DVF (Ventes logements)" value={selectedBuilding.subscores.marche} />
+                        <ScoreBar label="Performance Énergétique" value={selectedBuilding.subscores.energetique} />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -391,12 +419,16 @@ const BuildingScanner = () => {
                           <p className="font-bold text-slate-800">{selectedBuilding.year}</p>
                         </div>
                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <p className="text-xs text-slate-500 mb-1">Structure</p>
-                          <p className="font-bold text-slate-800 truncate">{selectedBuilding.details.structure}</p>
+                          <p className="text-xs text-slate-500 mb-1">Profondeur Bâtiment</p>
+                          <p className="font-bold text-slate-800">{selectedBuilding.details.profondeur}</p>
                         </div>
                         <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <p className="text-xs text-slate-500 mb-1">Hauteur s/ plafond</p>
-                          <p className="font-bold text-slate-800">{selectedBuilding.details.hsp}</p>
+                          <p className="text-xs text-slate-500 mb-1">Zonage PLU</p>
+                          <p className="font-bold text-slate-800 truncate">{selectedBuilding.details.zonage}</p>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                          <p className="text-xs text-slate-500 mb-1">Prix Marché</p>
+                          <p className="font-bold text-slate-800">{selectedBuilding.details.prix_m2}</p>
                         </div>
                       </div>
                     </div>
