@@ -68,52 +68,107 @@ const transformBDNBData = (bdnbData) => {
     lat: parseFloat(building.latitude) || (43.605 + Math.random() * 0.01),
     lng: parseFloat(building.longitude) || (3.875 + Math.random() * 0.015),
     score: calculateScore(building),
+    grade: getScoreGrade(calculateScore(building)),
     surface: building.surface_emprise_sol || building.s_geom_groupe || Math.floor(800 + Math.random() * 1500),
     type: getUsageType(building.usage_niveau_1_txt || building.usage_principal_bdnb_open),
     year: building.annee_construction || (1990 + Math.floor(Math.random() * 30)),
     floors: building.nb_niveau || (3 + Math.floor(Math.random() * 4)),
     details: {
       dpe: building.classe_bilan_dpe || building.classe_conso_energie_arrete_2012 || ['A', 'B', 'C', 'D'][Math.floor(Math.random() * 4)],
-      hsp: building.hauteur_mean ? `${(building.hauteur_mean / building.nb_niveau || 2.5).toFixed(1)}m` : '2.5m',
-      structure: getStructureType(building.materiaux_structure_mur_exterieur || building.mat_mur_txt),
-      fiber: 'À vérifier',
-      plu: 'Zone à déterminer',
-      access: building.accessibilite_pmr ? 'Conforme' : 'À vérifier'
+      profondeur: `${calculateBuildingDepth(building).toFixed(1)}m`,
+      zonage: ['UA (Mixité)', 'UB (Résidentiel)', 'UC (Pavillonnaire)'][Math.floor(Math.random() * 3)],
+      prix_m2: `${(2500 + Math.random() * 2000).toFixed(0)}€/m²`,
     },
     subscores: {
-      technique: calculateTechnicalScore(building),
-      reglementaire: calculateRegulatoryScore(building),
-      marche: calculateMarketScore(building),
-      esg: calculateESGScore(building)
+      plu: calculatePLUScore(building),
+      morphologie: calculateMorphologyScore(building), 
+      marche: calculateDVFScore(building),
+      energetique: calculateESGScore(building)
     }
   }));
 };
 
-// Calcul du score global
+// Calcul du score global basé sur les 3 critères majeurs
 const calculateScore = (building) => {
-  let score = 50;
-  if (building.classe_dpe && ['A', 'B'].includes(building.classe_dpe)) score += 20;
-  if (building.surface_plancher_totale > 1000) score += 15;
-  if (building.annee_construction > 2000) score += 10;
-  if (building.nb_niveaux >= 3) score += 5;
+  let score = 0;
+  
+  // Critère 1: Zonage PLU (30 points)
+  const pluScore = calculatePLUScore(building);
+  score += pluScore;
+  
+  // Critère 2: Forme du bâtiment (40 points)
+  const morphologyScore = calculateMorphologyScore(building);
+  score += morphologyScore;
+  
+  // Critère 3: Marché DVF (30 points)
+  const marketScore = calculateDVFScore(building);
+  score += marketScore;
+  
   return Math.min(Math.max(score, 0), 100);
 };
 
-const calculateTechnicalScore = (building) => {
-  let score = 60;
-  if (building.hauteur_sous_plafond > 2.7) score += 20;
-  if (building.materiaux_structure === 'beton') score += 15;
-  return Math.min(score, 100);
+// Critère 1: Zonage PLU - Logement autorisé
+const calculatePLUScore = (building) => {
+  // Simulation basée sur la zone
+  const zones = ['UA', 'UB', 'UC', 'UD', 'N', 'A'];
+  const zone = zones[Math.floor(Math.random() * zones.length)];
+  
+  if (['UA', 'UB'].includes(zone)) return 30; // Mixité autorisée
+  if (['UC', 'UD'].includes(zone)) return 20; // Résidentiel principal
+  return 5; // Zones restrictives
 };
 
-const calculateRegulatoryScore = (building) => {
-  let score = 70;
-  if (building.accessibilite_pmr) score += 20;
-  return Math.min(score, 100);
+// Critère 2: Morphologie - Forme adaptée aux logements
+const calculateMorphologyScore = (building) => {
+  let score = 0;
+  
+  // Profondeur des plateaux (lumière naturelle)
+  const depth = calculateBuildingDepth(building);
+  if (depth <= 15) score += 20; // Optimal
+  else if (depth <= 20) score += 15; // Acceptable
+  else score += 5; // Difficile
+  
+  // Hauteur sous plafond
+  const height = building.hauteur_mean / (building.nb_niveau || 3);
+  if (height >= 2.5) score += 10;
+  
+  // Structure modulable
+  if (building.materiaux_structure_mur_exterieur === 'beton') score += 10;
+  
+  return score;
 };
 
-const calculateMarketScore = (building) => {
-  return Math.floor(Math.random() * 30) + 70;
+// Critère 3: Marché DVF - Ventes de logements
+const calculateDVFScore = (building) => {
+  // Simulation prix m² et dynamisme marché
+  const pricePerM2 = 2500 + Math.random() * 2000; // 2500-4500€/m²
+  const salesVolume = Math.random(); // Volume de ventes
+  
+  let score = 0;
+  if (pricePerM2 > 3500) score += 20; // Marché premium
+  else if (pricePerM2 > 3000) score += 15; // Marché solide
+  else score += 10; // Marché accessible
+  
+  if (salesVolume > 0.7) score += 10; // Forte demande
+  
+  return score;
+};
+
+// Calcul profondeur bâtiment (simulation)
+const calculateBuildingDepth = (building) => {
+  const surface = building.surface_emprise_sol || building.s_geom_groupe || 1000;
+  // Approximation: profondeur = racine(surface) pour un bâtiment carré
+  return Math.sqrt(surface) * 0.6; // Facteur de forme
+};
+
+// Attribution d'une note de A à F
+const getScoreGrade = (score) => {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  if (score >= 50) return 'E';
+  return 'F';
 };
 
 const calculateESGScore = (building) => {
