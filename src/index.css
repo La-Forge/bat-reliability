@@ -1,0 +1,19 @@
+/* Leaflet CSS */
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fix pour les tuiles manquantes */
+.leaflet-container {
+  background-color: #f1f5f9 !important;
+}
+
+.leaflet-tile {
+  filter: none !important;
+}
+
+.leaflet-tile-container {
+  opacity: 1 !important;
+}
