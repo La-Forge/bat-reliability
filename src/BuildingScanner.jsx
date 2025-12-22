@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { MapPin, Building2, Search, Loader, Zap, Download, X, Map, List, TrendingUp, CheckCircle, AlertTriangle, Wifi, Ruler, MousePointer2 } from 'lucide-react';
+import { fetchBuildingsInBbox } from './services/bdnbService.js';
 
 // Lazy load de la carte
 const MapComponent = lazy(() => import('./MapComponent.jsx'));
@@ -99,8 +100,7 @@ const BuildingScanner = () => {
     }
   };
 
-  const handleScan = () => {
-    // (Même logique de scan que précédemment pour la simulation)
+  const handleScan = async () => {
     const searchKey = 'montpellier'; 
     setIsScanning(true);
     setScanProgress(0);
@@ -117,11 +117,39 @@ const BuildingScanner = () => {
     ];
 
     let currentStage = 0;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       if (currentStage < stages.length) {
         setScanProgress(stages[currentStage].progress);
+        
+        // Appel API BDNB à l'étape 30%
+        if (stages[currentStage].progress === 30) {
+          try {
+            // Zone Montpellier Antigone
+            const bdnbData = await fetchBuildingsInBbox(43.605, 3.875, 43.615, 3.890);
+            if (bdnbData && bdnbData.length > 0) {
+              // Utiliser les données BDNB
+              const realResults = {
+                scanned: bdnbData.length * 10,
+                potential: bdnbData.length,
+                zone: 'Montpellier - Données BDNB',
+                buildings: bdnbData.slice(0, 12) // Limiter à 12 résultats
+              };
+              
+              setTimeout(() => {
+                clearInterval(interval);
+                setResults(realResults);
+                setIsScanning(false);
+              }, 1500);
+              return;
+            }
+          } catch (error) {
+            console.error('Erreur API BDNB, utilisation des données de démonstration');
+          }
+        }
+        
         currentStage++;
       } else {
+        // Fallback sur les données de démo
         clearInterval(interval);
         setResults(mockScanResults[searchKey]);
         setIsScanning(false);
