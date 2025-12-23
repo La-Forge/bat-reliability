@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { MapPin, Building2, Search, Loader, Zap, Download, X, Map, List, TrendingUp, CheckCircle, AlertTriangle, Wifi, Ruler, MousePointer2 } from 'lucide-react';
 import { fetchBuildingsInBbox } from './services/bdnbService.js';
+import ListComponent from './ListComponent.jsx';
 
 // Lazy load de la carte
 const MapComponent = lazy(() => import('./MapComponent.jsx'));
@@ -11,8 +12,21 @@ const BuildingScanner = () => {
   const [scanProgress, setScanProgress] = useState(0);
   const [results, setResults] = useState(null);
   const [viewMode, setViewMode] = useState('map');
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview'); // Pour les détails
+  const [activeTab, setActiveTab] = useState('overview');
+  const [budgetTravaux, setBudgetTravaux] = useState(250000);
+  const [prixVenteM2, setPrixVenteM2] = useState(4000);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Filtres de recherche
+  const [filters, setFilters] = useState({
+    surfaceMin: 600,
+    yearMin: '',
+    yearMax: '',
+    tertiaire: true,
+    pluCompatible: true
+  });
 
   // Données réelles de Montpellier avec coordonnées GPS précises
   const mockScanResults = {
@@ -132,7 +146,7 @@ const BuildingScanner = () => {
                 scanned: bdnbData.length * 10,
                 potential: bdnbData.length,
                 zone: 'Montpellier - Données BDNB',
-                buildings: bdnbData.slice(0, 12) // Limiter à 12 résultats
+                buildings: bdnbData.sort((a, b) => b.score - a.score) // Tri par score décroissant
               };
               
               setTimeout(() => {
@@ -151,7 +165,9 @@ const BuildingScanner = () => {
       } else {
         // Fallback sur les données de démo
         clearInterval(interval);
-        setResults(mockScanResults[searchKey]);
+        const demoResults = mockScanResults[searchKey];
+        demoResults.buildings.sort((a, b) => b.score - a.score); // Tri par score
+        setResults(demoResults);
         setIsScanning(false);
       }
     }, 500);
@@ -194,7 +210,7 @@ const BuildingScanner = () => {
         </div>
         <div className="flex items-center gap-4">
            {!results ? (
-             <div className="flex gap-2">
+             <div className="flex gap-2 items-center">
                 <input 
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
@@ -221,22 +237,116 @@ const BuildingScanner = () => {
         </div>
       </header>
 
+      {/* Filters Panel - Always visible */}
+      {!results && (
+        <div className="bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
+          <div className="max-w-5xl grid grid-cols-5 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Surface min (m²)</label>
+              <input
+                type="number"
+                value={filters.surfaceMin}
+                onChange={(e) => setFilters({...filters, surfaceMin: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                placeholder="600"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Année min</label>
+              <input
+                type="number"
+                value={filters.yearMin}
+                onChange={(e) => setFilters({...filters, yearMin: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                placeholder="1990"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Année max</label>
+              <input
+                type="number"
+                value={filters.yearMax}
+                onChange={(e) => setFilters({...filters, yearMax: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                placeholder="2024"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Bâtiment tertiaire</label>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.tertiaire}
+                  onChange={(e) => setFilters({...filters, tertiaire: e.target.checked})}
+                  className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                />
+                <span className="text-sm text-slate-700">Uniquement tertiaire</span>
+              </label>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">PLU compatible</label>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.pluCompatible}
+                  onChange={(e) => setFilters({...filters, pluCompatible: e.target.checked})}
+                  className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                />
+                <span className="text-sm text-slate-700">Logement autorisé</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 flex relative overflow-hidden">
         
         {/* Loading Overlay */}
         {isScanning && (
           <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center">
-            <div className="w-96 text-center">
-              <Loader className="w-12 h-12 text-orange-600 animate-spin mx-auto mb-6" />
-              <h3 className="text-2xl font-bold text-slate-800 mb-2">Analyse macro-territoriale</h3>
-              <p className="text-slate-500 mb-8">Croisement des référentiels nationaux...</p>
-              <div className="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
-                <div 
-                  className="bg-orange-600 h-full transition-all duration-300"
-                  style={{ width: `${scanProgress}%` }}
-                />
+            <div className="w-96 text-center relative">
+              {/* Animation cercles concentriques */}
+              <div className="absolute top-12 left-1/2 transform -translate-x-1/2">
+                <div className="relative w-24 h-24">
+                  <div className="absolute inset-0 border-4 border-orange-600 rounded-full animate-ping"></div>
+                  <div className="absolute inset-2 border-4 border-orange-400 rounded-full animate-ping" style={{animationDelay: '0.5s'}}></div>
+                  <div className="absolute inset-4 border-4 border-orange-300 rounded-full animate-ping" style={{animationDelay: '1s'}}></div>
+                  
+                  {/* Bâtiment qui grandit */}
+                  <div className="absolute inset-6 bg-orange-600 rounded-full flex items-center justify-center">
+                    <div 
+                      className="transition-all duration-1000 ease-out"
+                      style={{
+                        transform: `scale(${0.3 + (scanProgress / 100) * 0.7})`,
+                        opacity: 0.8 + (scanProgress / 100) * 0.2
+                      }}
+                    >
+                      <Building2 className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="mt-2 text-sm font-mono text-slate-400">{scanProgress}%</p>
+              
+              <div className="mt-32">
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">Analyse macro-territoriale</h3>
+                <p className="text-slate-500 mb-4">Croisement des référentiels nationaux...</p>
+                
+                {/* Compteur bâtiments */}
+                <div className="bg-slate-100 rounded-lg p-4 mb-6">
+                  <div className="text-sm text-slate-600 mb-1">Bâtiments analysés</div>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {Math.floor((scanProgress / 100) * 2847)} / 2847
+                  </div>
+                </div>
+                
+                <div className="w-full bg-slate-200 rounded-full h-1 overflow-hidden">
+                  <div 
+                    className="bg-orange-600 h-full transition-all duration-300"
+                    style={{ width: `${scanProgress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-sm font-mono text-slate-400">{scanProgress}%</p>
+              </div>
             </div>
           </div>
         )}
@@ -250,14 +360,14 @@ const BuildingScanner = () => {
                 </div>
                 <h2 className="text-3xl font-bold text-slate-900 mb-4">Identifiez le potentiel caché</h2>
                 <p className="text-lg text-slate-600 mb-8">
-                  Analysez des milliers de bâtiments résidentiels pour détecter leur aptitude à la conversion en bureaux tertiaires. 
+                  Analysez des milliers de bâtiments tertiaires pour détecter leur aptitude à la conversion en logements résidentiels. 
                   Basé sur la BDNB, les fichiers fonciers et les règles d'urbanisme locales.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <TrendingUp className="w-6 h-6 text-green-600 mb-2" />
                     <h4 className="font-semibold">Potentiel Marché</h4>
-                    <p className="text-xs text-slate-500">Tension locative tertiaire</p>
+                    <p className="text-xs text-slate-500">Demande locative résidentielle</p>
                   </div>
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <Ruler className="w-6 h-6 text-blue-600 mb-2" />
@@ -266,8 +376,8 @@ const BuildingScanner = () => {
                   </div>
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <Zap className="w-6 h-6 text-amber-600 mb-2" />
-                    <h4 className="font-semibold">Performance</h4>
-                    <p className="text-xs text-slate-500">DPE & Décret Tertiaire</p>
+                    <h4 className="font-semibold">Réglementation</h4>
+                    <p className="text-xs text-slate-500">PLU & Zonage</p>
                   </div>
                 </div>
              </div>
@@ -278,7 +388,17 @@ const BuildingScanner = () => {
         {results && (
           <>
             {/* Sidebar List (Left) */}
-            <div className={`w-96 bg-white border-r border-slate-200 flex flex-col z-10 transition-all ${selectedBuilding ? 'hidden md:flex' : 'flex'}`}>
+            <div className={`bg-white border-r border-slate-200 flex flex-col z-10 transition-all duration-300 relative ${selectedBuilding ? 'hidden md:flex' : 'flex'} ${sidebarCollapsed ? 'w-12' : 'w-96'}`}>
+              {/* Toggle button */}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="absolute left-full top-1/2 -translate-y-1/2 bg-white border border-l-0 border-slate-200 rounded-r-lg p-2 hover:bg-slate-50 transition-colors shadow-md z-20"
+              >
+                {sidebarCollapsed ? '→' : '←'}
+              </button>
+              
+              {!sidebarCollapsed && (
+                <>
               <div className="p-4 border-b border-slate-100 bg-slate-50">
                 <div className="flex justify-between items-end">
                    <div>
@@ -296,16 +416,25 @@ const BuildingScanner = () => {
                   <div 
                     key={b.id}
                     onClick={() => setSelectedBuilding(b)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-md ${
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${
                       selectedBuilding?.id === b.id 
                       ? 'bg-blue-50 border-blue-500 shadow-sm' 
+                      : b.score >= 85
+                      ? 'bg-gradient-to-r from-emerald-50 to-white border-emerald-400 hover:border-emerald-500 shadow-sm'
                       : 'bg-white border-slate-200 hover:border-blue-300'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-slate-800 text-sm">{b.address}</h3>
-                      <span className={`${getScoreColor(b.score)} text-white text-xs font-bold px-2 py-1 rounded-full`}>
-                        {b.grade}
+                      <div className="flex items-center gap-2">
+                        {b.score >= 85 && (
+                          <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                            ★ PRIORITAIRE
+                          </span>
+                        )}
+                        <h3 className="font-semibold text-slate-800 text-sm">{b.address}</h3>
+                      </div>
+                      <span className={`${getScoreColor(b.score)} text-white text-sm font-bold px-2.5 py-1 rounded-lg`}>
+                        {b.score}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
@@ -317,28 +446,64 @@ const BuildingScanner = () => {
                   </div>
                 ))}
               </div>
+                </>
+              )}
             </div>
 
-            {/* Map Area (Center) */}
+            {/* Map/List Area (Center) */}
             <div className="flex-1 relative bg-slate-200">
-               <Suspense fallback={
-                 <div className="h-full flex items-center justify-center">
-                   <Loader className="w-8 h-8 text-orange-600 animate-spin" />
-                 </div>
-               }>
-                 <MapComponent 
+               {/* Toggle Carte/Liste */}
+               <div className="absolute top-4 left-4 z-20 bg-white rounded-lg shadow-lg border border-slate-200 flex">
+                 <button
+                   onClick={() => setViewMode('map')}
+                   className={`px-4 py-2 rounded-l-lg font-medium text-sm transition-colors flex items-center gap-2 ${
+                     viewMode === 'map'
+                       ? 'bg-orange-600 text-white'
+                       : 'bg-white text-slate-600 hover:bg-slate-50'
+                   }`}
+                 >
+                   <Map className="w-4 h-4" /> Carte
+                 </button>
+                 <button
+                   onClick={() => setViewMode('list')}
+                   className={`px-4 py-2 rounded-r-lg font-medium text-sm transition-colors flex items-center gap-2 ${
+                     viewMode === 'list'
+                       ? 'bg-orange-600 text-white'
+                       : 'bg-white text-slate-600 hover:bg-slate-50'
+                   }`}
+                 >
+                   <List className="w-4 h-4" /> Liste
+                 </button>
+               </div>
+
+               {viewMode === 'map' ? (
+                 <>
+                   <Suspense fallback={
+                     <div className="h-full flex items-center justify-center">
+                       <Loader className="w-8 h-8 text-orange-600 animate-spin" />
+                     </div>
+                   }>
+                     <MapComponent 
+                       buildings={results.buildings}
+                       selectedBuilding={selectedBuilding}
+                       onBuildingSelect={setSelectedBuilding}
+                     />
+                   </Suspense>
+                   
+                   {/* Instructions overlay if nothing selected */}
+                   {!selectedBuilding && (
+                     <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-full shadow-lg border border-slate-200 flex items-center gap-3 z-10">
+                       <MousePointer2 className="w-5 h-5 text-slate-400 animate-bounce" />
+                       <span className="text-sm font-medium text-slate-700">Sélectionnez un bâtiment sur la carte ou dans la liste</span>
+                     </div>
+                   )}
+                 </>
+               ) : (
+                 <ListComponent
                    buildings={results.buildings}
                    selectedBuilding={selectedBuilding}
                    onBuildingSelect={setSelectedBuilding}
                  />
-               </Suspense>
-               
-               {/* Instructions overlay if nothing selected */}
-               {!selectedBuilding && (
-                 <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur px-6 py-3 rounded-full shadow-lg border border-slate-200 flex items-center gap-3 z-10">
-                   <MousePointer2 className="w-5 h-5 text-slate-400 animate-bounce" />
-                   <span className="text-sm font-medium text-slate-700">Sélectionnez un bâtiment sur la carte ou dans la liste</span>
-                 </div>
                )}
             </div>
 
@@ -370,7 +535,7 @@ const BuildingScanner = () => {
 
                 {/* Tabs */}
                 <div className="flex border-b border-slate-200">
-                   {['overview', 'technical', 'financial'].map((tab) => (
+                   {['overview', 'photos', 'technical'].map((tab) => (
                      <button
                        key={tab}
                        onClick={() => setActiveTab(tab)}
@@ -381,8 +546,8 @@ const BuildingScanner = () => {
                        }`}
                      >
                        {tab === 'overview' && 'Synthèse'}
+                       {tab === 'photos' && 'Photos'}
                        {tab === 'technical' && 'Technique & Réglem.'}
-                       {tab === 'financial' && 'Simulateur'}
                      </button>
                    ))}
                 </div>
@@ -396,7 +561,7 @@ const BuildingScanner = () => {
                            <Zap className="w-4 h-4" /> Analyse Potentiel
                          </h4>
                          <p className="text-sm text-blue-800 leading-relaxed">
-                           Ce bâtiment présente une <strong>trame structurelle idéale</strong> pour une conversion en plateaux de bureaux ouverts. 
+                           Ce bâtiment présente une <strong>trame structurelle idéale</strong> pour une conversion en logements résidentiels. 
                            La zone UA du PLU permet le changement de destination sans dérogation majeure.
                          </p>
                       </div>
@@ -406,7 +571,6 @@ const BuildingScanner = () => {
                         <ScoreBar label="Zonage PLU (Logement autorisé)" value={selectedBuilding.subscores.plu} />
                         <ScoreBar label="Morphologie (Profondeur/Lumière)" value={selectedBuilding.subscores.morphologie} />
                         <ScoreBar label="Marché DVF (Ventes logements)" value={selectedBuilding.subscores.marche} />
-                        <ScoreBar label="Performance Énergétique" value={selectedBuilding.subscores.energetique} />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -434,6 +598,73 @@ const BuildingScanner = () => {
                     </div>
                   )}
 
+                  {activeTab === 'photos' && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-xl">
+                        <h4 className="font-semibold text-slate-900 mb-3">Vues du bâtiment</h4>
+                        <p className="text-sm text-slate-600 mb-4">Images satellite et vues aériennes</p>
+                      </div>
+
+                      {/* Vue aérienne */}
+                      <div>
+                        <h5 className="text-sm font-medium text-slate-700 mb-2">Vue aérienne</h5>
+                        <div className="bg-slate-200 rounded-lg h-48 overflow-hidden">
+                          <img 
+                            src={[
+                              'https://images.unsplash.com/photo-1479839672679-a46483c0e7c8?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1503915158607-25191b702717?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1549429739-12501235140e?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1533036814691-320c2b2913e1?auto=format&fit=crop&w=800&q=80'
+                            ][selectedBuilding.id % 5]}
+                            alt="Vue aérienne"
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Vue de rue */}
+                      <div>
+                        <h5 className="text-sm font-medium text-slate-700 mb-2">Vue de rue (Street View)</h5>
+                        <div className="bg-slate-200 rounded-lg h-48 overflow-hidden">
+                          <img 
+                            src={[
+                              'https://images.unsplash.com/photo-1534237710431-e2fc698436d5?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1623862660731-5c8e29f3d517?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1486718448742-163732cd1544?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=800&q=80'
+                            ][selectedBuilding.id % 5]}
+                            alt="Vue de rue"
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Vue de côté */}
+                      <div>
+                        <h5 className="text-sm font-medium text-slate-700 mb-2">Vue latérale</h5>
+                        <div className="bg-slate-200 rounded-lg h-48 overflow-hidden">
+                          <img 
+                            src={[
+                              'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1554469384-e58fac16e23a?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=800&q=80',
+                              'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=800&q=80'
+                            ][selectedBuilding.id % 5]}
+                            alt="Vue latérale"
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800">
+                        <strong>Note :</strong> Les images sont des exemples de bâtiments tertiaires similaires.
+                      </div>
+                    </div>
+                  )}
+
                   {activeTab === 'technical' && (
                     <div className="space-y-6">
                        <div>
@@ -441,11 +672,11 @@ const BuildingScanner = () => {
                          <ul className="space-y-3">
                            <li className="flex items-start gap-3 text-sm text-slate-600">
                              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                             <span>Capacité portante planchers (&gt; 250kg/m²) pour archivage/bureaux.</span>
+                             <span>Capacité portante planchers (&gt; 250kg/m²) adaptée pour conversion résidentielle.</span>
                            </li>
                            <li className="flex items-start gap-3 text-sm text-slate-600">
                              <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                             <span>Gaines techniques verticales suffisantes pour CVC.</span>
+                             <span>Gaines techniques verticales suffisantes pour réseaux.</span>
                            </li>
                            <li className="flex items-start gap-3 text-sm text-slate-600">
                              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
@@ -453,7 +684,7 @@ const BuildingScanner = () => {
                            </li>
                            <li className="flex items-start gap-3 text-sm text-slate-600">
                              <Wifi className="w-5 h-5 text-blue-500 shrink-0" />
-                             <span>Fibre optique pro : {selectedBuilding.details.fiber}.</span>
+                             <span>Fibre optique : {selectedBuilding.details.fiber || 'Non raccordé'}.</span>
                            </li>
                          </ul>
                        </div>
@@ -461,10 +692,10 @@ const BuildingScanner = () => {
                        <div className="border-t border-slate-100 pt-4">
                          <h4 className="font-semibold text-slate-900 mb-3">Réglementation (PLU Montpellier)</h4>
                          <div className="bg-slate-50 p-3 rounded text-sm text-slate-600 font-mono">
-                           Zone: {selectedBuilding.details.plu}<br/>
+                           Zone: {selectedBuilding.details.zonage}<br/>
                            CES: 0.6<br/>
                            Hauteur Max: 18m<br/>
-                           Stationnement: 1 place / 60m² bureaux
+                           Stationnement: 1 place / 80m² logement
                          </div>
                        </div>
                     </div>
